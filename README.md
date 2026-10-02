@@ -39,16 +39,18 @@ The platform combines **Data Engineering, Data Analytics, Machine Learning, and 
 
 # DataNova
 
-DataNova is a clean foundation for a data and analytics application. Phase 1 establishes the frontend, backend, and ML package boundaries without implementing product workflows.
+DataNova is a foundation for a data and analytics application. The frontend and backend foundations are in place, and authentication is implemented; ETL, analytics, ML, AI, and reporting workflows remain out of scope.
 
-## Phase 1 Work Completed
+## Implemented
 
 - Added a Next.js App Router frontend using TypeScript and Tailwind CSS.
-- Added a reusable service-status component and a typed API client.
-- Added a FastAPI application with one `GET /api/v1/health` endpoint.
+- Added login and registration forms connected to the FastAPI authentication API.
+- Added JWT authentication in an HttpOnly cookie, current-user lookup, logout, and ADMIN-only user listing. Registration assigns the `USER` role; supported roles are `ADMIN`, `ANALYST`, and `USER`.
+- Added password hashing, a SQLAlchemy user model, and an Alembic migration.
+- Added a FastAPI health endpoint and reusable frontend service-status component.
 - Created the requested backend, ML, data, reports, docs, and Docker directory structure.
 - Added environment and Git ignore examples.
-- Kept authentication, ETL, ML, AI, report generation, and dashboard logic out of scope.
+- Kept ETL, ML, AI, report generation, and dashboard data logic out of scope.
 
 ## Project Structure
 
@@ -60,8 +62,8 @@ frontend/                 Next.js, TypeScript, Tailwind CSS
 backend/
   app/
     api/                   HTTP routes
-    auth/                  Reserved for authentication
-    models/                Reserved for persistence models
+    auth/                  Password hashing, JWT, and access dependencies
+    models/                SQLAlchemy user model
     schemas/               API response schemas
     services/              Reserved for application services
     analytics/             Reserved for analytics
@@ -89,10 +91,11 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-The API is available at `http://localhost:8000`; its health check is `http://localhost:8000/api/v1/health`.
+Set `JWT_SECRET_KEY` to a unique secret outside development. The API is available at `http://localhost:8000`; its health check is `http://localhost:8000/api/v1/health`.
 
 Frontend, from the repository root:
 
@@ -102,13 +105,13 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. The page checks the health endpoint using `NEXT_PUBLIC_API_URL`; copy the value from `.env.example` to `frontend/.env.local` to override the default. Set `CORS_ORIGINS` in the backend process environment when the frontend runs from a different origin.
+Open `http://localhost:3000`; unauthenticated users are sent to `/login`, with registration at `/register`. The session JWT is stored only in an HttpOnly cookie. Set `NEXT_PUBLIC_API_URL` to override the API default, and set `CORS_ORIGINS` in the backend process environment when the frontend runs from a different origin.
 
 ## Verification
 
 ```powershell
 npm --prefix frontend run build
 npm --prefix frontend run lint
+cd backend
+.\.venv\Scripts\python.exe -m pytest
 ```
-
-Install the backend requirements before starting the API. No domain behavior beyond the health check is implemented in this phase.

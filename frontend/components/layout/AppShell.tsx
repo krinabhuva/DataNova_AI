@@ -12,6 +12,7 @@ import {
   FileText,
   GitBranch,
   LayoutDashboard,
+  LogOut,
   PackageSearch,
   Search,
   Settings,
@@ -21,8 +22,9 @@ import {
   Warehouse,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
-import { fetchBackendStatus } from "@/lib/api";
+import { fetchBackendStatus, fetchCurrentUser, logout, type AuthUser } from "@/lib/api";
 import { StatusPanel } from "@/components/ui/StatusPanel";
 
 const navigation = [
@@ -43,9 +45,18 @@ const navigation = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [sessionCheck, setSessionCheck] = useState<{
+    pathname: string;
+    user: AuthUser | null;
+  } | null>(null);
+  const [logoutError, setLogoutError] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"loading" | "healthy" | "unavailable">(
     "loading",
   );
+  const isAuthPage = pathname === "/login" || pathname === "/register";
+  const currentUser = sessionCheck?.user ?? null;
   const currentPage =
     navigation.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)) ??
     navigation[0];
@@ -65,6 +76,56 @@ export function AppShell({ children }: { children: ReactNode }) {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (isAuthPage) {
+      return;
+    }
+
+    let isMounted = true;
+    void fetchCurrentUser()
+      .then((user) => {
+        if (isMounted) {
+          setSessionCheck({ pathname, user });
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSessionCheck({ pathname, user: null });
+          router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthPage, pathname, router]);
+
+  async function handleLogout() {
+    setLogoutError("");
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      setSessionCheck({ pathname, user: null });
+      router.replace("/login");
+    } catch {
+      setLogoutError("Sign out failed. Please try again.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
+  if (isAuthPage) {
+    return <>{children}</>;
+  }
+
+  if (sessionCheck?.pathname !== pathname || !currentUser) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 text-sm text-slate-600">
+        Checking your session...
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 px-3 py-3 text-slate-900 lg:px-5 lg:py-5">
@@ -128,16 +189,39 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
-                  AN
+                  {currentUser?.full_name
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map((part) => part[0])
+                    .join("")
+                    .toUpperCase()}
                 </div>
                 <div className="hidden text-left sm:block">
-                  <div className="text-sm font-medium text-slate-900">Alex Morgan</div>
-                  <div className="text-[11px] text-slate-500">Operations Lead</div>
+                  <div className="max-w-36 truncate text-sm font-medium text-slate-900">
+                    {currentUser?.full_name}
+                  </div>
+                  <div className="text-[11px] text-slate-500">{currentUser?.role}</div>
                 </div>
                 <Building2 className="hidden h-4 w-4 text-slate-500 sm:block" />
+                <button
+                  aria-label="Sign out"
+                  className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50"
+                  disabled={isLoggingOut}
+                  onClick={() => void handleLogout()}
+                  title="Sign out"
+                  type="button"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </header>
+
+          {logoutError ? (
+            <p aria-live="polite" className="mt-3 text-right text-sm text-rose-700">
+              {logoutError}
+            </p>
+          ) : null}
 
           <main className="pt-5">{children}</main>
         </div>
