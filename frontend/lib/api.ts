@@ -38,6 +38,64 @@ export interface AuthUser {
   role: UserRole;
 }
 
+export interface DatasetRecord {
+  id: number;
+  filename: string;
+  file_type: "CSV" | "Excel";
+  content_type: string;
+  file_size_bytes: number;
+  row_count: number;
+  column_count: number;
+  uploaded_at: string;
+}
+
+async function readDatasetError(response: Response): Promise<Error> {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    return new Error(payload.detail ?? "Dataset request failed.");
+  } catch {
+    return new Error(`Dataset request failed with status ${response.status}.`);
+  }
+}
+
+export async function fetchDatasets(): Promise<DatasetRecord[]> {
+  const response = await fetch(`${API_BASE_URL}/api/datasets`, { cache: "no-store" });
+  if (!response.ok) {
+    throw await readDatasetError(response);
+  }
+  return (await response.json()) as DatasetRecord[];
+}
+
+export async function fetchDataset(datasetId: number): Promise<DatasetRecord> {
+  const response = await fetch(`${API_BASE_URL}/api/datasets/${datasetId}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw await readDatasetError(response);
+  }
+  return (await response.json()) as DatasetRecord;
+}
+
+export async function uploadDataset(file: File): Promise<DatasetRecord> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/api/datasets`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw await readDatasetError(response);
+  }
+  return (await response.json()) as DatasetRecord;
+}
+
+export async function deleteDataset(datasetId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/datasets/${datasetId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw await readDatasetError(response);
+  }
+}
+
 async function authRequest(
   path: string,
   method: "GET" | "POST",

@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     auth_cookie_name: str = "datanova_access_token"
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "datanova"
+    minio_secure: bool = False
+    dataset_max_upload_bytes: int = 52_428_800
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -32,6 +38,8 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET_KEY must be at least 32 characters in production")
         if self.access_token_expire_minutes < 1:
             raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be positive")
+        if self.dataset_max_upload_bytes < 1:
+            raise ValueError("DATASET_MAX_UPLOAD_BYTES must be positive")
         return self
 
     @property
