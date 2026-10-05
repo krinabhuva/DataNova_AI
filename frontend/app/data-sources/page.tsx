@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { FileUp, Trash2, UploadCloud } from "lucide-react";
 
 import { KpiCard } from "@/components/ui/KpiCard";
@@ -218,6 +219,7 @@ export default function DataSourcesPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <button type="button" onClick={() => void showDetails(dataset.id)} className="font-medium text-sky-700 hover:text-sky-900">Details</button>
+                        <Link href={`/pipelines?datasetId=${dataset.id}`} className="font-medium text-sky-700 hover:text-sky-900">Run ETL</Link>
                         <button
                           type="button"
                           onClick={() => void removeDataset(dataset)}

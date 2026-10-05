@@ -31,6 +31,14 @@ class ObjectStorage:
     def remove(self, object_key: str) -> None:
         self.client.remove_object(self.bucket, object_key)
 
+    def get(self, object_key: str) -> bytes:
+        response = self.client.get_object(self.bucket, object_key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+
 
 @lru_cache
 def get_object_storage() -> ObjectStorage:

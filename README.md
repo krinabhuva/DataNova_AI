@@ -53,4 +53,27 @@ uvicorn app.main:app --reload
 The API provides `POST /api/datasets` (multipart field `file`), `GET /api/datasets`,
 `GET /api/datasets/{dataset_id}`, and `DELETE /api/datasets/{dataset_id}`.
 
+### ETL and data quality
+
+Apply the latest Alembic migrations before starting the API. The Data Sources page
+keeps the existing upload workflow; use **Run ETL** beside a stored source to open
+its pipeline configuration. The pipeline extracts CSV or the first worksheet of an
+`.xlsx` file from MinIO, validates selected numeric/date columns, handles missing
+values and duplicates, applies the configured column/value transformations, and
+loads valid rows into a new PostgreSQL table.
+
+`POST /api/pipelines/run` accepts `dataset_id`, `destination_table`, and optional
+cleaning and transformation settings. Numeric and date columns are comma-separated
+in the UI and must match source headers. Missing values can be kept as `NULL`,
+rejected with their row, or filled with a supplied value; duplicates can be dropped
+or retained. Header normalization, trimming, rename/drop columns, and selected
+lower/uppercase value conversions are supported. Destination and output column
+names are safely quoted by SQLAlchemy; existing destination tables are not
+overwritten.
+
+Run history and quality metrics are available from `GET /api/pipelines` and
+`GET /api/pipelines/{run_id}`. Each run records total, valid, and rejected rows,
+detected duplicates, missing cells, a valid-rows/total-rows quality percentage,
+duration, status, and validation or execution errors.
+
 > **DataNova — Transforming Data into Intelligent Decisions.**

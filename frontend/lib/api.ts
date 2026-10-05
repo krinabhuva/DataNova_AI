@@ -49,12 +49,57 @@ export interface DatasetRecord {
   uploaded_at: string;
 }
 
+export interface PipelineRunRecord {
+  id: number;
+  dataset_id: number;
+  dataset_filename: string;
+  pipeline_name: string;
+  destination_table: string;
+  status: "RUNNING" | "SUCCESS" | "FAILED";
+  total_rows: number;
+  valid_rows: number;
+  rejected_rows: number;
+  duplicates: number;
+  missing_values: number;
+  quality_score: number;
+  duration_ms: number;
+  duration: string;
+  started_at: string;
+  finished_at: string | null;
+  errors: string[];
+}
+
+export interface PipelineRunRequest {
+  dataset_id: number;
+  destination_table: string;
+  missing_value_action: "keep" | "drop_row" | "fill";
+  fill_value: string;
+  duplicate_action: "drop" | "keep";
+  numeric_columns: string[];
+  date_columns: string[];
+  drop_columns: string[];
+  lowercase_columns: string[];
+  uppercase_columns: string[];
+  rename_columns: Record<string, string>;
+  trim_strings: boolean;
+  normalize_headers: boolean;
+}
+
 async function readDatasetError(response: Response): Promise<Error> {
   try {
     const payload = (await response.json()) as { detail?: string };
     return new Error(payload.detail ?? "Dataset request failed.");
   } catch {
     return new Error(`Dataset request failed with status ${response.status}.`);
+  }
+}
+
+async function readPipelineError(response: Response): Promise<Error> {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    return new Error(payload.detail ?? "Pipeline request failed.");
+  } catch {
+    return new Error(`Pipeline request failed with status ${response.status}.`);
   }
 }
 
@@ -94,6 +139,34 @@ export async function deleteDataset(datasetId: number): Promise<void> {
   if (!response.ok) {
     throw await readDatasetError(response);
   }
+}
+
+export async function fetchPipelineRuns(): Promise<PipelineRunRecord[]> {
+  const response = await fetch(`${API_BASE_URL}/api/pipelines`, { cache: "no-store" });
+  if (!response.ok) {
+    throw await readPipelineError(response);
+  }
+  return (await response.json()) as PipelineRunRecord[];
+}
+
+export async function fetchPipelineRun(runId: number): Promise<PipelineRunRecord> {
+  const response = await fetch(`${API_BASE_URL}/api/pipelines/${runId}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw await readPipelineError(response);
+  }
+  return (await response.json()) as PipelineRunRecord;
+}
+
+export async function executePipeline(request: PipelineRunRequest): Promise<PipelineRunRecord> {
+  const response = await fetch(`${API_BASE_URL}/api/pipelines/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw await readPipelineError(response);
+  }
+  return (await response.json()) as PipelineRunRecord;
 }
 
 async function authRequest(
