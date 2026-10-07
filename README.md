@@ -89,4 +89,15 @@ Stored business records are available from `GET /api/customers`,
 `GET /api/inventory`. Each endpoint accepts `limit` (1–500, default 100) and
 `offset` query parameters.
 
+### Generative AI insights
+
+Set `GEMINI_API_KEY` in `backend/.env` (see `backend/.env.example`) and optionally
+set `GEMINI_MODEL` to choose the Gemini model. The key stays on the backend.
+The AI Insights page sends questions to `POST /api/ai/ask`; the API supports
+revenue explanations, top products, highest-revenue regions, valuable customers,
+inventory risk, and revenue predictions. It selects predefined analytics or ML
+functions based on the question and sends Gemini only the relevant bounded
+aggregates, never raw database records or user-provided SQL. Unsupported questions
+are rejected, and Gemini responses are validated as structured JSON.
+
 > **DataNova — Transforming Data into Intelligent Decisions.**

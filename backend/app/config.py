@@ -3,6 +3,7 @@ from typing import List
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.types import SecretStr
 
 
 class Settings(BaseSettings):
@@ -21,6 +22,8 @@ class Settings(BaseSettings):
     minio_bucket: str = "datanova"
     minio_secure: bool = False
     dataset_max_upload_bytes: int = 52_428_800
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-2.5-flash"
 
     model_config = SettingsConfigDict(
         env_file=".env",

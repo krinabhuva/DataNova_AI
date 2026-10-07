@@ -8,6 +8,39 @@ export interface HealthResponse {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export interface AIAnswer {
+  intent:
+    | "revenue_explanation"
+    | "top_products"
+    | "highest_revenue_region"
+    | "valuable_customers"
+    | "inventory_risk"
+    | "revenue_prediction";
+  answer: string;
+  key_findings: string[];
+  recommendations: string[];
+  confidence: "low" | "medium" | "high";
+}
+
+export async function askAI(question: string): Promise<AIAnswer> {
+  const response = await fetch(`${API_BASE_URL}/api/ai/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify({ question }),
+  });
+  if (!response.ok) {
+    let message = `AI request failed with status ${response.status}.`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      message = payload.detail ?? message;
+    } catch {}
+    throw new Error(message);
+  }
+  return (await response.json()) as AIAnswer;
+}
+
 export async function fetchHealth(): Promise<HealthResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/health`, {
     cache: "no-store",
