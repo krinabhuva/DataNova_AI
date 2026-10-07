@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database.session import get_db
 from app.models.dataset import Dataset
+from app.models.pipeline_run import PipelineRun
 from app.schemas.dataset import DatasetResponse
 from app.services.dataset_validation import DatasetFileValidationError, validate_dataset_file
 from app.services.object_storage import ObjectStorage, get_object_storage
@@ -117,6 +118,11 @@ def delete_dataset(
     dataset = db.get(Dataset, dataset_id)
     if dataset is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found.")
+    if db.scalar(select(PipelineRun.id).where(PipelineRun.dataset_id == dataset_id).limit(1)) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Datasets with ETL run history cannot be deleted.",
+        )
 
     db.delete(dataset)
     try:

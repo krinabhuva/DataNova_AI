@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { SectionCard } from "@/components/ui/SectionCard";
@@ -9,12 +9,14 @@ import { login, register } from "@/lib/api";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isRegister = mode === "register";
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const registrationComplete = mode === "login" && searchParams.get("registered") === "1";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,10 +26,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     try {
       if (isRegister) {
         await register(email, fullName, password);
-      } else {
-        await login(email, password);
+        router.replace("/login?registered=1");
+        return;
       }
 
+      await login(email, password);
       const requestedPath = new URLSearchParams(window.location.search).get("next");
       const destination =
         requestedPath?.startsWith("/") && !requestedPath.startsWith("//")
@@ -56,6 +59,15 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           subtitle={isRegister ? "Register for DataNova" : "Sign in to DataNova"}
         >
           <form className="space-y-4" onSubmit={handleSubmit}>
+            {registrationComplete ? (
+              <p
+                aria-live="polite"
+                className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+                role="status"
+              >
+                Account created. Sign in with your new credentials.
+              </p>
+            ) : null}
             {isRegister ? (
               <label className="block space-y-1.5 text-sm font-medium text-slate-700">
                 Full name
@@ -96,7 +108,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
             </label>
 
             {error ? (
-              <p aria-live="polite" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              <p aria-live="polite" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
                 {error}
               </p>
             ) : null}

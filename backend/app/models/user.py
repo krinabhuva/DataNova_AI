@@ -1,7 +1,8 @@
 from enum import Enum
+from datetime import datetime
 
 from sqlalchemy import Enum as SqlEnum
-from sqlalchemy import String
+from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -22,4 +23,14 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         SqlEnum(UserRole, native_enum=False, length=16), nullable=False, default=UserRole.USER
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )

@@ -59,6 +59,9 @@ export interface PipelineRunRecord {
   total_rows: number;
   valid_rows: number;
   rejected_rows: number;
+  rows_loaded: number;
+  load_status: "PENDING" | "SUCCESS" | "FAILED";
+  load_error: string | null;
   duplicates: number;
   missing_values: number;
   quality_score: number;
@@ -229,4 +232,202 @@ export async function logout(): Promise<void> {
   if (!response.ok) {
     throw await readAuthError(response);
   }
+}
+
+export interface AnalyticsResponse {
+  summary: {
+    total_revenue: number;
+    total_orders: number;
+    total_customers: number;
+    total_profit: number;
+    growth: number;
+    inventory_value: number;
+    profit_margin: number;
+  };
+  period_sales: {
+    daily: number;
+    weekly: number;
+    monthly: number;
+    yearly: number;
+  };
+  revenue_trend: Array<{ name: string; revenue: number; profit: number }>;
+  category_sales: Array<{ name: string; sales: number; revenue: number }>;
+  regional_sales: Array<{ name: string; revenue: number; orders: number }>;
+  top_products: Array<{
+    name: string;
+    category: string;
+    sales: number;
+    revenue: number;
+    profit: number;
+    stock: number;
+  }>;
+  customer_growth: Array<{ month: string; new: number; returning: number }>;
+  customer_metrics: Array<{ label: string; value: number }>;
+  inventory_status: Array<{ name: string; value: number; count: number }>;
+}
+
+export async function fetchAnalytics(): Promise<AnalyticsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/analytics`, { cache: "no-store" });
+  if (!response.ok) {
+    let message = `Analytics request failed with status ${response.status}.`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      message = payload.detail ?? message;
+    } catch {}
+    throw new Error(message);
+  }
+  return (await response.json()) as AnalyticsResponse;
+}
+
+export interface CustomerRecord {
+  id: number;
+  customer_code: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  region: string | null;
+  city: string | null;
+  created_at: string;
+}
+
+export interface MLModelRecord {
+  id: number;
+  model_key: string;
+  name: string;
+  version: string;
+  algorithm: string;
+  dataset: string;
+  training_date: string;
+  metrics: Record<string, number | string | null>;
+  status: "Active" | "Preview" | "Monitoring";
+}
+
+export interface SegmentationResult {
+  status: "trained" | "insufficient_data";
+  message?: string;
+  algorithm?: string;
+  metrics: Record<string, number>;
+  customers: Array<{
+    customer_id: number;
+    customer_code: string;
+    name: string;
+    recency_days: number;
+    frequency: number;
+    monetary: number;
+    segment: string;
+  }>;
+}
+
+export interface ChurnResult {
+  status: "trained" | "preview" | "insufficient_data";
+  algorithm?: string;
+  message?: string;
+  metrics: Record<string, number | null>;
+  predictions: Array<{
+    customer_id: number;
+    customer_code: string;
+    name: string;
+    churn_probability: number;
+    churn_risk: "Low" | "Medium" | "High";
+  }>;
+}
+
+export interface ForecastResult {
+  status: "trained" | "preview" | "insufficient_data";
+  algorithm?: string;
+  message?: string;
+  metrics: Record<string, number | string | null>;
+  history: Array<{ period: string; actual: number }>;
+  forecast: Array<{ period: string; forecast: number }>;
+}
+
+export interface InventoryDemandResult {
+  status: "trained" | "preview" | "insufficient_data";
+  algorithm?: string;
+  message?: string;
+  metrics: Record<string, number>;
+  inventory_value: number;
+  items: Array<{
+    product_id: number;
+    product: string;
+    current_stock: number;
+    predicted_demand: number;
+    recommended_stock: number;
+    risk: "Low" | "Medium" | "High";
+    status: "Healthy" | "Watch" | "Critical";
+  }>;
+}
+
+export interface AnomalyResult {
+  status: "trained" | "preview" | "insufficient_data";
+  algorithm?: string;
+  message?: string;
+  metrics: Record<string, number>;
+  anomalies: Array<{
+    sale_id: number;
+    order_id: number;
+    customer_id: number;
+    product_id: number;
+    order_date: string;
+    quantity: number;
+    revenue: number;
+    profit: number;
+    anomaly_score: number;
+  }>;
+}
+
+async function mlRequest<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/api/ml/${path}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = `ML request failed with status ${response.status}.`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      message = payload.detail ?? message;
+    } catch {}
+    throw new Error(message);
+  }
+  return (await response.json()) as T;
+}
+
+export async function fetchCustomers(): Promise<CustomerRecord[]> {
+  const response = await fetch(`${API_BASE_URL}/api/customers?limit=500`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Customer request failed with status ${response.status}.`);
+  return (await response.json()) as CustomerRecord[];
+}
+
+export async function fetchMlModels(): Promise<MLModelRecord[]> {
+  const response = await fetch(`${API_BASE_URL}/api/ml/models`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Model catalog request failed with status ${response.status}.`);
+  return (await response.json()) as MLModelRecord[];
+}
+
+export async function fetchCustomerSegmentation(): Promise<SegmentationResult> {
+  return mlRequest("segmentation");
+}
+
+export async function fetchCustomerChurn(): Promise<ChurnResult> {
+  return mlRequest("churn");
+}
+
+export async function fetchSalesForecast(horizon: number): Promise<ForecastResult> {
+  return mlRequest(`forecast?horizon=${horizon}`);
+}
+
+export async function fetchInventoryDemand(): Promise<InventoryDemandResult> {
+  return mlRequest("inventory-demand");
+}
+
+export async function fetchSalesAnomalies(): Promise<AnomalyResult> {
+  return mlRequest("anomalies");
+}
+
+export async function trainMlSuite(): Promise<void> {
+  await fetchCustomerSegmentation();
+  await fetchCustomerChurn();
+  await fetchSalesForecast(3);
+  await fetchInventoryDemand();
+  await fetchSalesAnomalies();
 }

@@ -170,7 +170,7 @@ function PipelinesContent() {
               <label className="block text-sm font-medium text-slate-700">
                 PostgreSQL destination table
                 <input required pattern="[A-Za-z_][A-Za-z0-9_]*" maxLength={63} value={destinationTable} onChange={(event) => setDestinationTable(event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
-                <span className="mt-1 block text-xs font-normal text-slate-500">Use a new SQL table name for each load.</span>
+                <span className="mt-1 block text-xs font-normal text-slate-500">Use customers, products, orders, sales, or inventory for structured storage.</span>
               </label>
             </div>
 
@@ -247,7 +247,10 @@ function PipelinesContent() {
                 <tr>
                   <th className="px-4 py-3 font-medium">Pipeline</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Rows</th>
+                  <th className="px-4 py-3 font-medium">Processed</th>
+                  <th className="px-4 py-3 font-medium">Loaded</th>
+                  <th className="px-4 py-3 font-medium">Rejected</th>
+                  <th className="px-4 py-3 font-medium">DB load</th>
                   <th className="px-4 py-3 font-medium">Quality</th>
                   <th className="px-4 py-3 font-medium">Duration</th>
                   <th className="px-4 py-3 font-medium">Started</th>
@@ -255,14 +258,17 @@ function PipelinesContent() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={6}>Loading pipeline history…</td></tr>
+                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={9}>Loading pipeline history…</td></tr>
                 ) : runs.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={6}>No ETL runs yet.</td></tr>
+                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={9}>No ETL runs yet.</td></tr>
                 ) : runs.map((run) => (
                   <tr key={run.id} className={`cursor-pointer border-t border-slate-200 hover:bg-slate-50 ${selectedRun?.id === run.id ? "bg-slate-50" : ""}`} onClick={() => setSelectedRun(run)}>
                     <td className="px-4 py-3 font-medium text-slate-900">{run.pipeline_name}</td>
                     <td className="px-4 py-3"><StatusBadge label={run.status} tone={statusTone(run.status)} /></td>
-                    <td className="px-4 py-3">{run.valid_rows.toLocaleString()} / {run.total_rows.toLocaleString()}</td>
+                    <td className="px-4 py-3">{run.total_rows.toLocaleString()}</td>
+                    <td className="px-4 py-3">{run.rows_loaded.toLocaleString()}</td>
+                    <td className="px-4 py-3">{run.rejected_rows.toLocaleString()}</td>
+                    <td className="px-4 py-3"><StatusBadge label={run.load_status} tone={run.load_status === "SUCCESS" ? "success" : run.load_status === "FAILED" ? "danger" : "warning"} /></td>
                     <td className="px-4 py-3">{run.quality_score.toFixed(2)}%</td>
                     <td className="px-4 py-3">{run.duration}</td>
                     <td className="px-4 py-3">{new Date(run.started_at).toLocaleString()}</td>
@@ -280,6 +286,7 @@ function PipelinesContent() {
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>Status</span><StatusBadge label={selectedRun.status} tone={statusTone(selectedRun.status)} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <Metric label="Total rows" value={selectedRun.total_rows} />
+                <Metric label="Rows loaded" value={selectedRun.rows_loaded} />
                 <Metric label="Valid rows" value={selectedRun.valid_rows} />
                 <Metric label="Rejected rows" value={selectedRun.rejected_rows} />
                 <Metric label="Duplicates" value={selectedRun.duplicates} />
@@ -287,6 +294,8 @@ function PipelinesContent() {
                 <Metric label="Quality score" value={`${selectedRun.quality_score.toFixed(2)}%`} />
               </div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>Duration</span><span className="font-medium text-slate-900">{selectedRun.duration}</span></div>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>Database load</span><StatusBadge label={selectedRun.load_status} tone={selectedRun.load_status === "SUCCESS" ? "success" : selectedRun.load_status === "FAILED" ? "danger" : "warning"} /></div>
+              {selectedRun.load_error && <div className="rounded-xl bg-rose-50 p-3 text-rose-800">{selectedRun.load_error}</div>}
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>Finished</span><span className="font-medium text-slate-900">{selectedRun.finished_at ? new Date(selectedRun.finished_at).toLocaleString() : "In progress"}</span></div>
               {selectedRun.errors.length > 0 && (
                 <div className="rounded-xl bg-rose-50 p-3 text-rose-800">

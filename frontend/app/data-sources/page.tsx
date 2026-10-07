@@ -8,7 +8,15 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { deleteDataset, DatasetRecord, fetchDataset, fetchDatasets, uploadDataset } from "@/lib/api";
+import {
+  deleteDataset,
+  DatasetRecord,
+  fetchDataset,
+  fetchDatasets,
+  fetchPipelineRuns,
+  PipelineRunRecord,
+  uploadDataset,
+} from "@/lib/api";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -25,6 +33,7 @@ export default function DataSourcesPage() {
   const csvInput = useRef<HTMLInputElement>(null);
   const excelInput = useRef<HTMLInputElement>(null);
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
+  const [runs, setRuns] = useState<PipelineRunRecord[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<DatasetRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -33,10 +42,11 @@ export default function DataSourcesPage() {
 
   useEffect(() => {
     let active = true;
-    fetchDatasets()
-      .then((records) => {
+    Promise.all([fetchDatasets(), fetchPipelineRuns()])
+      .then(([records, pipelineRuns]) => {
         if (!active) return;
         setDatasets(records);
+        setRuns(pipelineRuns);
         setError("");
       })
       .catch((requestError: unknown) => {
@@ -106,6 +116,9 @@ export default function DataSourcesPage() {
   const totalRows = datasets.reduce((sum, dataset) => sum + dataset.row_count, 0);
   const totalBytes = datasets.reduce((sum, dataset) => sum + dataset.file_size_bytes, 0);
   const latestDataset = datasets[0];
+  const latestRunForDataset = (datasetId: number) =>
+    runs.find((run) => run.dataset_id === datasetId);
+  const selectedRun = selectedDataset ? latestRunForDataset(selectedDataset.id) : undefined;
   const metrics = [
     { label: "Datasets", value: datasets.length.toLocaleString(), change: "total", description: "raw uploads", trend: "neutral" as const },
     { label: "Rows Uploaded", value: totalRows.toLocaleString(), change: "total", description: "across all datasets", trend: "neutral" as const },
@@ -171,6 +184,19 @@ export default function DataSourcesPage() {
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>Columns</span><span className="font-medium text-slate-900">{selectedDataset.column_count.toLocaleString()}</span></div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>File size</span><span className="font-medium text-slate-900">{formatBytes(selectedDataset.file_size_bytes)}</span></div>
               <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>Uploaded</span><span className="font-medium text-slate-900">{formatDate(selectedDataset.uploaded_at)}</span></div>
+              {selectedRun ? (
+                <>
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>ETL status</span><StatusBadge label={selectedRun.status} tone={selectedRun.status === "SUCCESS" ? "success" : selectedRun.status === "FAILED" ? "danger" : "warning"} /></div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <DatasetMetric label="Processed" value={selectedRun.total_rows} />
+                    <DatasetMetric label="Loaded" value={selectedRun.rows_loaded} />
+                    <DatasetMetric label="Rejected" value={selectedRun.rejected_rows} />
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>Database load</span><StatusBadge label={selectedRun.load_status} tone={selectedRun.load_status === "SUCCESS" ? "success" : selectedRun.load_status === "FAILED" ? "danger" : "warning"} /></div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><span>ETL status</span><StatusBadge label="Not run" tone="neutral" /></div>
+              )}
             </div>
           ) : (
             <div className="space-y-3 text-sm text-slate-600">
@@ -196,25 +222,35 @@ export default function DataSourcesPage() {
                   <th className="px-4 py-3 font-medium">Type</th>
                   <th className="px-4 py-3 font-medium">Rows</th>
                   <th className="px-4 py-3 font-medium">Upload date</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">ETL status</th>
+                  <th className="px-4 py-3 font-medium">Processed</th>
+                  <th className="px-4 py-3 font-medium">Loaded</th>
+                  <th className="px-4 py-3 font-medium">Rejected</th>
+                  <th className="px-4 py-3 font-medium">DB load</th>
                   <th className="px-4 py-3 font-medium">File size</th>
                   <th className="px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={7}>Loading datasets…</td></tr>
+                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={11}>Loading datasets…</td></tr>
                 ) : error && datasets.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={7}>Datasets could not be loaded.</td></tr>
+                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={11}>Datasets could not be loaded.</td></tr>
                 ) : datasets.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={7}>No datasets uploaded yet.</td></tr>
-                ) : datasets.map((dataset) => (
-                  <tr key={dataset.id} className="border-t border-slate-200">
+                  <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={11}>No datasets uploaded yet.</td></tr>
+                ) : datasets.map((dataset) => {
+                  const run = latestRunForDataset(dataset.id);
+                  return (
+                    <tr key={dataset.id} className="cursor-pointer border-t border-slate-200" onClick={() => void showDetails(dataset.id)}>
                     <td className="px-4 py-3 font-medium text-slate-900">{dataset.filename}</td>
                     <td className="px-4 py-3">{dataset.file_type}</td>
                     <td className="px-4 py-3">{dataset.row_count.toLocaleString()}</td>
                     <td className="px-4 py-3">{formatDate(dataset.uploaded_at)}</td>
-                    <td className="px-4 py-3"><StatusBadge label="Stored" tone="success" /></td>
+                    <td className="px-4 py-3"><StatusBadge label={run?.status ?? "Not run"} tone={!run ? "neutral" : run.status === "SUCCESS" ? "success" : run.status === "FAILED" ? "danger" : "warning"} /></td>
+                    <td className="px-4 py-3">{run?.total_rows.toLocaleString() ?? "—"}</td>
+                    <td className="px-4 py-3">{run?.rows_loaded.toLocaleString() ?? "—"}</td>
+                    <td className="px-4 py-3">{run?.rejected_rows.toLocaleString() ?? "—"}</td>
+                    <td className="px-4 py-3"><StatusBadge label={run?.load_status ?? "—"} tone={!run ? "neutral" : run.load_status === "SUCCESS" ? "success" : run.load_status === "FAILED" ? "danger" : "warning"} /></td>
                     <td className="px-4 py-3">{formatBytes(dataset.file_size_bytes)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -230,13 +266,23 @@ export default function DataSourcesPage() {
                         </button>
                       </div>
                     </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </SectionCard>
       </div>
+    </div>
+  );
+}
+
+function DatasetMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <p className="text-xs text-slate-500">{label} rows</p>
+      <p className="mt-1 font-medium text-slate-900">{value.toLocaleString()}</p>
     </div>
   );
 }

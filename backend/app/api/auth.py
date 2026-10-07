@@ -29,14 +29,20 @@ def set_auth_cookie(response: Response, user: User) -> None:
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(
     request: RegisterRequest,
-    response: Response,
     db: Session = Depends(get_db),
 ) -> User:
+    email = str(request.email).lower()
+    if db.scalar(select(User.id).where(User.email == email)) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        )
     user = User(
-        email=str(request.email).lower(),
+        email=email,
         full_name=request.full_name.strip(),
         password_hash=hash_password(request.password),
         role=UserRole.USER,
+        is_active=True,
     )
     if not user.full_name:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Name is required")
@@ -47,7 +53,6 @@ def register(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists") from None
     db.refresh(user)
-    set_auth_cookie(response, user)
     return user
 
 
@@ -58,7 +63,7 @@ def login(
     db: Session = Depends(get_db),
 ) -> User:
     user = db.scalar(select(User).where(User.email == str(request.email).lower()))
-    if user is None or not verify_password(request.password, user.password_hash):
+    if user is None or not user.is_active or not verify_password(request.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     set_auth_cookie(response, user)
     return user

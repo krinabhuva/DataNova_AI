@@ -53,6 +53,9 @@ class PipelineRunResponse(BaseModel):
     total_rows: int
     valid_rows: int
     rejected_rows: int
+    rows_loaded: int
+    load_status: Literal["PENDING", "SUCCESS", "FAILED"]
+    load_error: str | None
     duplicates: int
     missing_values: int
     quality_score: float
@@ -60,4 +63,5 @@ class PipelineRunResponse(BaseModel):
     duration: str
     started_at: datetime
     finished_at: datetime | None
+    created_at: datetime
     errors: list[str]

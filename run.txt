@@ -1,0 +1,10 @@
+backend 
+python -m alembic upgrade head
+python -m pytest -q
+uvicorn app.main:app --reload
+
+frontend
+npm run dev
+npm run lint
+npx tsc --noEmit
+npm run build

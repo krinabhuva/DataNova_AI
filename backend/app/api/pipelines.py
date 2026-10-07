@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models.dataset import Dataset
 from app.models.pipeline_run import PipelineRun
+from app.repositories.common import BusinessStorageError
 from app.schemas.pipeline import PipelineRunCreate, PipelineRunResponse
+from app.services.business_storage import BUSINESS_DESTINATIONS, load_business_rows
 from app.services.etl import PipelineExecutionError, load_rows, prepare_pipeline
 from app.services.object_storage import ObjectStorage, get_object_storage
 
@@ -60,6 +62,7 @@ def run_pipeline(
         dataset_filename=dataset.filename,
         destination_table=request.destination_table,
         status="RUNNING",
+        load_status="PENDING",
         started_at=datetime.now(UTC),
         errors=[],
     )
@@ -88,14 +91,20 @@ def run_pipeline(
         run.missing_values = metrics.missing_values
         run.quality_score = metrics.quality_score
         run.errors = metrics.errors
-        load_rows(db, request.destination_table, prepared)
+        if request.destination_table.lower() in BUSINESS_DESTINATIONS:
+            run.rows_loaded = load_business_rows(db, request.destination_table, prepared.rows)
+        else:
+            load_rows(db, request.destination_table, prepared)
+            run.rows_loaded = len(prepared.rows)
+        run.load_status = "SUCCESS"
+        run.load_error = None
         run.status = "SUCCESS"
         run.finished_at = datetime.now(UTC)
         run.duration_ms = max(0, int((monotonic() - started_clock) * 1000))
         db.commit()
         db.refresh(run)
         return run
-    except (MinioException, PipelineExecutionError, SQLAlchemyError) as exc:
+    except (MinioException, PipelineExecutionError, BusinessStorageError, SQLAlchemyError) as exc:
         db.rollback()
         persisted_run = db.get(PipelineRun, run.id)
         if persisted_run is None:
@@ -114,6 +123,9 @@ def run_pipeline(
             persisted_run.errors = [*metrics.errors, str(exc)]
         else:
             persisted_run.errors = [str(exc)]
+        persisted_run.rows_loaded = 0
+        persisted_run.load_status = "FAILED"
+        persisted_run.load_error = str(exc)[:1000]
         persisted_run.status = "FAILED"
         persisted_run.finished_at = datetime.now(UTC)
         persisted_run.duration_ms = max(0, int((monotonic() - started_clock) * 1000))

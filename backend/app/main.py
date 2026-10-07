@@ -9,6 +9,7 @@ from app.api.datasets import router as datasets_router
 from app.api.health import router as health_router
 from app.api.inventory import router as inventory_router
 from app.api.ml import router as ml_router
+from app.api.orders import router as orders_router
 from app.api.pipelines import router as pipelines_router
 from app.api.products import router as products_router
 from app.api.reports import router as reports_router
@@ -36,6 +37,7 @@ app.include_router(customers_router, prefix="/api")
 app.include_router(products_router, prefix="/api")
 app.include_router(sales_router, prefix="/api")
 app.include_router(inventory_router, prefix="/api")
+app.include_router(orders_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
 app.include_router(datasets_router, prefix="/api")
 app.include_router(pipelines_router, prefix="/api")

@@ -1,10 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.auth.security import hash_password
+from app.auth.security import create_access_token, hash_password
 from app.database.base import Base
 from app.database.session import get_db
 from app.main import app
@@ -53,8 +53,96 @@ def test_registration_creates_user_role_and_http_only_cookie(client: TestClient)
 
     assert user["role"] == "USER"
     assert "password_hash" not in user
+    assert client.cookies.get("datanova_access_token") is None
+    with TestSessionLocal() as db:
+        stored_user = db.scalar(select(User).where(User.email == "user@example.com"))
+        assert stored_user is not None
+        assert stored_user.password_hash != "correct-horse-battery"
+        assert stored_user.password_hash.startswith("pbkdf2_sha256$")
+        assert stored_user.is_active is True
+        assert stored_user.created_at is not None
+        assert stored_user.updated_at is not None
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "user@example.com", "password": "correct-horse-battery"},
+    )
+    assert login_response.status_code == 200
     assert client.cookies.get("datanova_access_token")
     assert client.get("/api/auth/me").json()["email"] == "user@example.com"
+    assert "password_hash" not in client.get("/api/auth/me").json()
+
+
+def test_duplicate_email_is_rejected_case_insensitively(client: TestClient) -> None:
+    register(client)
+
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "email": "USER@example.com",
+            "full_name": "Duplicate User",
+            "password": "another-password",
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_protected_endpoint_accepts_bearer_token_and_rejects_missing_token(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/users")
+    assert response.status_code == 401
+
+    register(client)
+    with TestSessionLocal() as db:
+        admin = User(
+            email="admin@example.com",
+            full_name="Admin User",
+            password_hash=hash_password("correct-horse-battery"),
+            role=UserRole.ADMIN,
+        )
+        db.add(admin)
+        db.commit()
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "admin@example.com", "password": "correct-horse-battery"},
+    )
+    token = client.cookies.get("datanova_access_token")
+    assert token
+    client.cookies.clear()
+    protected_response = client.get(
+        "/api/users",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert protected_response.status_code == 200
+    assert all("password_hash" not in user for user in protected_response.json())
+
+
+def test_inactive_user_cannot_login_or_use_existing_token(client: TestClient) -> None:
+    with TestSessionLocal() as db:
+        user = User(
+            email="inactive@example.com",
+            full_name="Inactive User",
+            password_hash=hash_password("correct-horse-battery"),
+            role=UserRole.USER,
+            is_active=False,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "inactive@example.com", "password": "correct-horse-battery"},
+    )
+    assert login_response.status_code == 401
+    protected_response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {create_access_token(user)}"},
+    )
+    assert protected_response.status_code == 401
 
 
 def test_login_and_wrong_password(client: TestClient) -> None:
@@ -77,6 +165,10 @@ def test_login_and_wrong_password(client: TestClient) -> None:
 
 def test_protected_api_and_logout(client: TestClient) -> None:
     register(client)
+    assert client.post(
+        "/api/auth/login",
+        json={"email": "user@example.com", "password": "correct-horse-battery"},
+    ).status_code == 200
     assert client.get("/api/auth/me").status_code == 200
 
     logout_response = client.post("/api/auth/logout")
